@@ -7,7 +7,8 @@ yarn.lock
 .env
 .env.local
 .env.*.local
-
+.\backend.env
+D:\resume\Comm-Sync-AI\backend\.env
 # Build output
 dist/
 build/

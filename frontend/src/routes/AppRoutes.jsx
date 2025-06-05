@@ -16,7 +16,6 @@ const AppRoutes = () => {
                 <Route path="/register" element={<Register />} />
                 <Route path="/project" element={<UserAuth><Project /></UserAuth>} />
             </Routes>
-
         </BrowserRouter>
     )
 }
