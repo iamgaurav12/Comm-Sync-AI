@@ -1,46 +1,15 @@
-# Dependencies
-node_modules/
-package-lock.json
-yarn.lock
+# Ignore all files by default
+*
 
-# Environment variables
+# But include these:
+!.gitignore
+!package.json
+!package-lock.json
+!src/
+!prisma/
+!README.md
+
+# Exclude environment file and build artifacts
 .env
-.env.local
-.env.*.local
-
-# Build output
 dist/
-build/
-out/
-
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Testing
-coverage/
-.nyc_output/
-
-# Temporary files
-tmp/
-temp/
-
-# Model files and datasets
-*.model
-*.weights
-*.h5
-datasets/
-
-# Cache
-.cache/
-.npm/
+node_modules/

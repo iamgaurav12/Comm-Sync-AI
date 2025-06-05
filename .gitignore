@@ -1,47 +1,17 @@
-# Dependencies
+# Node.js folders
 node_modules/
-package-lock.json
-yarn.lock
 
-# Environment variables
-.env
-.env.local
-.env.*.local
-.\backend.env
-D:\resume\Comm-Sync-AI\backend\.env
-# Build output
-dist/
-build/
-out/
+# Env files
+**/.env
 
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
+# Build outputs
+**/dist
+**/build
 
 # Logs
-logs/
 *.log
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
-# Testing
-coverage/
-.nyc_output/
-
-# Temporary files
-tmp/
-temp/
-
-# Model files and datasets
-*.model
-*.weights
-*.h5
-datasets/
-
-# Cache
-.cache/
-.npm/
+# OS-specific
+.DS_Store
+Thumbs.db
