@@ -61,7 +61,7 @@ export const addUserToProject = async (req, res) => {
       projectId,
       users,
       userId: loggedInUser._id,
-    });
+    }); 
 
     return res.status(200).json({
       project,
