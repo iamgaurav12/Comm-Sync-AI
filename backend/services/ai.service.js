@@ -34,9 +34,8 @@ const model = genAI.getGenerativeModel({
                     console.log('Server is running on port 3000');
                 })
                 "
-            
+            },
         },
-    },
 
         "package.json": {
             file: {
@@ -58,15 +57,9 @@ const model = genAI.getGenerativeModel({
                     }
 }
 
-                
                 "
-                
-                
-
             },
-
         },
-
     },
     "buildCommand": {
         mainItem: "npm",
@@ -83,9 +76,7 @@ const model = genAI.getGenerativeModel({
    
     </example>
 
-
-    
-       <example>
+    <example>
 
        user:Hello 
        response:{
@@ -95,13 +86,10 @@ const model = genAI.getGenerativeModel({
        </example>
     
  IMPORTANT : don't use file name like routes/index.js
-       
-       
     `,
 });
 
 export const generateResult = async (prompt) => {
   const result = await model.generateContent(prompt);
-
   return result.response.text();
 };
