@@ -6,6 +6,7 @@ import {
   initializeSocket,
   receiveMessage,
   sendMessage,
+  disconnectSocket,
 } from "../config/socket";
 import Markdown from "markdown-to-jsx";
 import hljs from "highlight.js";
@@ -17,8 +18,6 @@ function SyntaxHighlightedCode(props) {
   React.useEffect(() => {
     if (ref.current && props.className?.includes("lang-") && window.hljs) {
       window.hljs.highlightElement(ref.current);
-
-      // hljs won't reprocess the element unless this attribute is removed
       ref.current.removeAttribute("data-highlighted");
     }
   }, [props.className, props.children]);
@@ -28,17 +27,26 @@ function SyntaxHighlightedCode(props) {
 
 const Project = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Check if project data exists, redirect if not
+  useEffect(() => {
+    if (!location.state?.project) {
+      navigate("/");
+      return;
+    }
+  }, [location.state, navigate]);
 
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState(new Set()); // Initialized as Set
-  const [project, setProject] = useState(location.state.project);
+  const [selectedUserId, setSelectedUserId] = useState(new Set());
+  const [project, setProject] = useState(location.state?.project || null);
   const [message, setMessage] = useState("");
   const { user } = useContext(UserContext);
-  const messageBox = React.createRef();
+  const messageBox = useRef(null);
 
   const [users, setUsers] = useState([]);
-  const [messages, setMessages] = useState([]); // New state variable for messages
+  const [messages, setMessages] = useState([]);
   const [fileTree, setFileTree] = useState({});
 
   const [currentFile, setCurrentFile] = useState(null);
@@ -49,6 +57,14 @@ const Project = () => {
 
   const [runProcess, setRunProcess] = useState(null);
 
+  // Add ref to track if socket is initialized
+  const socketInitialized = useRef(false);
+
+  // Early return if no project
+  if (!project) {
+    return <div>Loading...</div>;
+  }
+
   const handleUserClick = (id) => {
     setSelectedUserId((prevSelectedUserId) => {
       const newSelectedUserId = new Set(prevSelectedUserId);
@@ -57,7 +73,6 @@ const Project = () => {
       } else {
         newSelectedUserId.add(id);
       }
-
       return newSelectedUserId;
     });
   };
@@ -65,24 +80,116 @@ const Project = () => {
   function addCollaborators() {
     axios
       .put("/projects/add-user", {
-        projectId: location.state.project._id,
+        projectId: project._id,
         users: Array.from(selectedUserId),
       })
       .then((res) => {
         console.log(res.data);
         setIsModalOpen(false);
+        setSelectedUserId(new Set());
+        fetchProjectData();
       })
       .catch((err) => {
         console.log(err);
       });
   }
 
+  // Function to get localStorage key for project messages
+  const getMessagesStorageKey = () => `project_messages_${project._id}`;
+
+  // Function to save messages to localStorage
+  const saveMessagesToStorage = (messages) => {
+    try {
+      localStorage.setItem(getMessagesStorageKey(), JSON.stringify(messages));
+    } catch (error) {
+      console.error("Error saving messages to localStorage:", error);
+    }
+  };
+
+  // Function to load messages from localStorage
+  const loadMessagesFromStorage = () => {
+    try {
+      const storedMessages = localStorage.getItem(getMessagesStorageKey());
+      return storedMessages ? JSON.parse(storedMessages) : [];
+    } catch (error) {
+      console.error("Error loading messages from localStorage:", error);
+      return [];
+    }
+  };
+
+  // Add function to fetch messages from server
+  function fetchProjectMessages() {
+    // First load messages from localStorage immediately
+    const cachedMessages = loadMessagesFromStorage();
+    if (cachedMessages.length > 0) {
+      setMessages(cachedMessages);
+    }
+
+    // Then try to fetch from server
+    axios
+      .get(`/projects/get-messages/${project._id}`)
+      .then((res) => {
+        console.log("Fetched messages from server:", res.data.messages);
+        const serverMessages = res.data.messages || [];
+        
+        // Merge server messages with cached messages (avoid duplicates)
+        const mergedMessages = mergeMessages(cachedMessages, serverMessages);
+        setMessages(mergedMessages);
+        saveMessagesToStorage(mergedMessages);
+      })
+      .catch((err) => {
+        console.log("Error fetching messages from server:", err);
+        // If server fails, use cached messages
+        if (cachedMessages.length === 0) {
+          setMessages([]);
+        }
+      });
+  }
+
+  // Function to merge messages and avoid duplicates
+  const mergeMessages = (cached, server) => {
+    const allMessages = [...cached];
+    
+    server.forEach(serverMsg => {
+      // Check if message already exists (simple check by content and sender)
+      const exists = cached.some(cachedMsg => 
+        cachedMsg.message === serverMsg.message && 
+        cachedMsg.sender._id === serverMsg.sender._id &&
+        Math.abs(new Date(cachedMsg.timestamp || 0) - new Date(serverMsg.timestamp || 0)) < 1000
+      );
+      
+      if (!exists) {
+        allMessages.push(serverMsg);
+      }
+    });
+    
+    // Sort by timestamp if available
+    return allMessages.sort((a, b) => {
+      const aTime = new Date(a.timestamp || 0);
+      const bTime = new Date(b.timestamp || 0);
+      return aTime - bTime;
+    });
+  };
+
   const send = () => {
-    sendMessage("project-message", {
+    if (!message.trim()) return;
+    
+    const messageData = {
       message,
       sender: user,
-    });
-    setMessages((prevMessages) => [...prevMessages, { sender: user, message }]); // Update messages state
+      timestamp: new Date().toISOString(), // Add timestamp
+    };
+    
+    // Add message to local state immediately for better UX
+    const updatedMessages = [...messages, messageData];
+    setMessages(updatedMessages);
+    
+    // Save to localStorage immediately
+    saveMessagesToStorage(updatedMessages);
+    
+    // Send message via socket
+    sendMessage("project-message", messageData);
+    
     setMessage("");
   };
 
@@ -103,8 +210,62 @@ const Project = () => {
     );
   }
 
+  function fetchProjectData() {
+    axios
+      .get(`/projects/get-project/${project._id}`)
+      .then((res) => {
+        console.log(res.data.project);
+        setProject(res.data.project);
+        setFileTree(res.data.project.fileTree || {});
+      })
+      .catch((err) => {
+        console.log(err);
+      });
+  }
+
   useEffect(() => {
-    initializeSocket(project._id);
+    if (!project) return;
+
+    // Prevent duplicate socket initialization
+    if (!socketInitialized.current) {
+      initializeSocket(project._id);
+      socketInitialized.current = true;
+
+      receiveMessage("project-message", (data) => {
+        console.log("Received message:", data);
+
+        if (data.sender._id === "ai") {
+          const messageData = JSON.parse(data.message);
+          console.log(messageData);
+
+          if (webContainer && messageData.fileTree) {
+            webContainer.mount(messageData.fileTree);
+          }
+
+          if (messageData.fileTree) {
+            setFileTree(messageData.fileTree || {});
+          }
+          
+          // Add AI message to state and save to localStorage
+          setMessages((prevMessages) => {
+            const updatedMessages = [...prevMessages, data];
+            saveMessagesToStorage(updatedMessages);
+            return updatedMessages;
+          });
+        } else {
+          // For non-AI messages, check if it's from current user
+          if (data.sender._id !== user._id.toString()) {
+            // Only add if it's from another user (not current user)
+            setMessages((prevMessages) => {
+              const updatedMessages = [...prevMessages, data];
+              saveMessagesToStorage(updatedMessages);
+              return updatedMessages;
+            });
+          }
+          // If it's from current user, we already added it locally in send()
+        }
+      });
+    }
 
     if (!webContainer) {
       getWebContainer().then((container) => {
@@ -113,33 +274,9 @@ const Project = () => {
       });
     }
 
-    receiveMessage("project-message", (data) => {
-      console.log(data);
-
-      if (data.sender._id == "ai") {
-        const message = JSON.parse(data.message);
-
-        console.log(message);
-
-        webContainer?.mount(message.fileTree);
-
-        if (message.fileTree) {
-          setFileTree(message.fileTree || {});
-        }
-        setMessages((prevMessages) => [...prevMessages, data]); // Update messages state
-      } else {
-        setMessages((prevMessages) => [...prevMessages, data]); // Update messages state
-      }
-    });
-
-    axios
-      .get(`/projects/get-project/${location.state.project._id}`)
-      .then((res) => {
-        console.log(res.data.project);
-
-        setProject(res.data.project);
-        setFileTree(res.data.project.fileTree || {});
-      });
+    // Fetch project data and messages
+    fetchProjectData();
+    fetchProjectMessages(); // Add this line to fetch messages on component mount
 
     axios
       .get("/users/all")
@@ -149,7 +286,15 @@ const Project = () => {
       .catch((err) => {
         console.log(err);
       });
-  }, []);
+
+    // Cleanup function
+    return () => {
+      if (socketInitialized.current) {
+        disconnectSocket();
+        socketInitialized.current = false;
+      }
+    };
+  }, [project?._id]); // Removed webContainer from dependencies
 
   function saveFileTree(ft) {
     axios
@@ -165,11 +310,23 @@ const Project = () => {
       });
   }
 
-  // Removed appendIncomingMessage and appendOutgoingMessage functions
-
   function scrollToBottom() {
-    messageBox.current.scrollTop = messageBox.current.scrollHeight;
+    if (messageBox.current) {
+      messageBox.current.scrollTop = messageBox.current.scrollHeight;
+    }
   }
+
+  // Auto-scroll when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  // Save messages to localStorage whenever messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      saveMessagesToStorage(messages);
+    }
+  }, [messages]);
 
   return (
     <main className="h-screen w-screen flex">
@@ -193,11 +350,11 @@ const Project = () => {
           >
             {messages.map((msg, index) => (
               <div
-                key={index}
+                key={`${msg.sender._id}-${index}-${msg.message.substring(0, 10)}`} // Better key
                 className={`${
                   msg.sender._id === "ai" ? "max-w-80" : "max-w-52"
                 } ${
-                  msg.sender._id == user._id.toString() && "ml-auto"
+                  msg.sender._id === user._id.toString() && "ml-auto"
                 }  message flex flex-col p-2 bg-slate-50 w-fit rounded-md`}
               >
                 <small className="opacity-65 text-xs">{msg.sender.email}</small>
@@ -216,6 +373,7 @@ const Project = () => {
             <input
               value={message}
               onChange={(e) => setMessage(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && send()}
               className="p-2 px-4 border-none outline-none flex-grow"
               type="text"
               placeholder="Enter message"
@@ -232,7 +390,6 @@ const Project = () => {
         >
           <header className="flex justify-between items-center px-4 p-2 bg-slate-200">
             <h1 className="font-semibold text-lg">Collaborators</h1>
-
             <button
               onClick={() => setIsSidePanelOpen(!isSidePanelOpen)}
               className="p-2"
@@ -242,13 +399,16 @@ const Project = () => {
           </header>
           <div className="users flex flex-col gap-2">
             {project.users &&
-              project.users.map((user) => {
+              project.users.map((projectUser) => {
                 return (
-                  <div className="user cursor-pointer hover:bg-slate-200 p-2 flex gap-2 items-center">
+                  <div 
+                    key={projectUser._id}
+                    className="user cursor-pointer hover:bg-slate-200 p-2 flex gap-2 items-center"
+                  >
                     <div className="aspect-square rounded-full w-fit h-fit flex items-center justify-center p-5 text-white bg-slate-600">
                       <i className="ri-user-fill absolute"></i>
                     </div>
-                    <h1 className="font-semibold text-lg">{user.email}</h1>
+                    <h1 className="font-semibold text-lg">{projectUser.email}</h1>
                   </div>
                 );
               })}
@@ -256,7 +416,7 @@ const Project = () => {
         </div>
       </section>
 
-      <section className="right  bg-red-50 flex-grow h-full flex">
+      <section className="right bg-red-50 flex-grow h-full flex">
         <div className="explorer h-full max-w-64 min-w-52 bg-slate-200">
           <div className="file-tree w-full">
             {Object.keys(fileTree).map((file, index) => (
@@ -293,6 +453,8 @@ const Project = () => {
             <div className="actions flex gap-2">
               <button
                 onClick={async () => {
+                  if (!webContainer) return;
+                  
                   await webContainer.mount(fileTree);
 
                   const installProcess = await webContainer.spawn("npm", [
@@ -330,9 +492,9 @@ const Project = () => {
                     setIframeUrl(url);
                   });
                 }} 
-                className="p-2 px-4 bg-slate-300 text-white"
+                className="p-2 px-4 bg-slate-600 text-white rounded"
               >
-                run
+                Run
               </button>
             </div>
           </div>
@@ -400,20 +562,20 @@ const Project = () => {
               </button>
             </header>
             <div className="users-list flex flex-col gap-2 mb-16 max-h-96 overflow-auto">
-              {users.map((user) => (
+              {users.map((modalUser) => (
                 <div
-                  key={user.id}
+                  key={modalUser._id}
                   className={`user cursor-pointer hover:bg-slate-200 ${
-                    Array.from(selectedUserId).indexOf(user._id) != -1
+                    Array.from(selectedUserId).includes(modalUser._id)
                       ? "bg-slate-200"
                       : ""
                   } p-2 flex gap-2 items-center`}
-                  onClick={() => handleUserClick(user._id)}
+                  onClick={() => handleUserClick(modalUser._id)}
                 >
                   <div className="aspect-square relative rounded-full w-fit h-fit flex items-center justify-center p-5 text-white bg-slate-600">
                     <i className="ri-user-fill absolute"></i>
                   </div>
-                  <h1 className="font-semibold text-lg">{user.email}</h1>
+                  <h1 className="font-semibold text-lg">{modalUser.email}</h1>
                 </div>
               ))}
             </div>

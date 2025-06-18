@@ -7,7 +7,7 @@ const Register = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const { setUser } = useContext(UserContext);
+  const { login } = useContext(UserContext); // Use login function from context
 
   const navigate = useNavigate();
 
@@ -21,8 +21,10 @@ const Register = () => {
       })
       .then((res) => {
         console.log(res.data);
-        localStorage.setItem("token", res.data.token);
-        setUser(res.data.user);
+        
+        // Use the login function from context instead of manual localStorage
+        login(res.data.user, res.data.token);
+        
         navigate("/");
       })
       .catch((err) => {
@@ -41,10 +43,12 @@ const Register = () => {
             </label>
             <input
               onChange={(e) => setEmail(e.target.value)}
+              value={email}
               type="email"
               id="email"
               className="w-full p-3 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Enter your email"
+              required
             />
           </div>
           <div className="mb-6">
@@ -53,11 +57,12 @@ const Register = () => {
             </label>
             <input
               onChange={(e) => setPassword(e.target.value)}
-              s
+              value={password}
               type="password"
               id="password"
               className="w-full p-3 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Enter your password"
+              required
             />
           </div>
           <button
