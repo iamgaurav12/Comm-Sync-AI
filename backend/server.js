@@ -12,7 +12,8 @@ const port = process.env.PORT || 4000;
 // ✅ Use same allowed origins as in app.js
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://comm-sync-ai.vercel.app"
+  "https://comm-sync-ai.vercel.app",
+  "https://comm-sync-ai-3vjv.vercel.app"
 ];
 
 const server = http.createServer(app);

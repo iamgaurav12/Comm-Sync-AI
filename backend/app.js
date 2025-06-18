@@ -42,7 +42,8 @@ const app = express();
 // ✅ Define your allowed frontend origins (dev + prod)
 const allowedOrigins = [
   "http://localhost:5173",               // local dev
-  "https://comm-sync-ai.vercel.app"     // your live Vercel frontend
+  "https://comm-sync-ai.vercel.app",
+  "https://comm-sync-ai-3vjv.vercel.app"     // your live Vercel frontend
 ];
 
 // ✅ Robust CORS middleware
