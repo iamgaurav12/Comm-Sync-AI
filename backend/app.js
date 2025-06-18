@@ -47,6 +47,13 @@ const allowedOrigins = [
   "https://comm-sync-ai-3vjv.vercel.app"
 ];
 
+// 🆕 ADD CROSS-ORIGIN ISOLATION HEADERS FOR WEBCONTAINER
+app.use((req, res, next) => {
+  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  next();
+});
+
 // ✅ Robust CORS middleware
 const corsOptions = {
   origin: function (origin, callback) {

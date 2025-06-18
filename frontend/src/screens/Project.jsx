@@ -54,6 +54,8 @@ const Project = () => {
 
   const [webContainer, setWebContainer] = useState(null);
   const [iframeUrl, setIframeUrl] = useState(null);
+  const [webContainerError, setWebContainerError] = useState(null);
+  const [isWebContainerSupported, setIsWebContainerSupported] = useState(true);
 
   const [runProcess, setRunProcess] = useState(null);
 
@@ -100,7 +102,10 @@ const Project = () => {
   // Function to save messages to localStorage
   const saveMessagesToStorage = (messages) => {
     try {
-      localStorage.setItem(getMessagesStorageKey(), JSON.stringify(messages));
+      // Use in-memory storage as fallback if localStorage is not available
+      if (typeof Storage !== "undefined") {
+        localStorage.setItem(getMessagesStorageKey(), JSON.stringify(messages));
+      }
     } catch (error) {
       console.error("Error saving messages to localStorage:", error);
     }
@@ -109,8 +114,11 @@ const Project = () => {
   // Function to load messages from localStorage
   const loadMessagesFromStorage = () => {
     try {
-      const storedMessages = localStorage.getItem(getMessagesStorageKey());
-      return storedMessages ? JSON.parse(storedMessages) : [];
+      if (typeof Storage !== "undefined") {
+        const storedMessages = localStorage.getItem(getMessagesStorageKey());
+        return storedMessages ? JSON.parse(storedMessages) : [];
+      }
+      return [];
     } catch (error) {
       console.error("Error loading messages from localStorage:", error);
       return [];
@@ -223,6 +231,32 @@ const Project = () => {
       });
   }
 
+  // Check if cross-origin isolation is enabled
+  const checkCrossOriginIsolation = () => {
+    return typeof window !== 'undefined' && window.crossOriginIsolated;
+  };
+
+  // Initialize WebContainer with error handling
+  const initializeWebContainer = async () => {
+    try {
+      // Check if cross-origin isolation is supported
+      if (!checkCrossOriginIsolation()) {
+        setWebContainerError("WebContainer requires cross-origin isolation. Please ensure your server sends the following headers:\n- Cross-Origin-Embedder-Policy: require-corp\n- Cross-Origin-Opener-Policy: same-origin");
+        setIsWebContainerSupported(false);
+        return;
+      }
+
+      const container = await getWebContainer();
+      setWebContainer(container);
+      setWebContainerError(null);
+      console.log("WebContainer initialized successfully");
+    } catch (error) {
+      console.error("Failed to initialize WebContainer:", error);
+      setWebContainerError(`Failed to initialize WebContainer: ${error.message}`);
+      setIsWebContainerSupported(false);
+    }
+  };
+
   useEffect(() => {
     if (!project) return;
 
@@ -239,7 +273,9 @@ const Project = () => {
           console.log(messageData);
 
           if (webContainer && messageData.fileTree) {
-            webContainer.mount(messageData.fileTree);
+            webContainer.mount(messageData.fileTree).catch(err => {
+              console.error("Failed to mount file tree:", err);
+            });
           }
 
           if (messageData.fileTree) {
@@ -267,11 +303,9 @@ const Project = () => {
       });
     }
 
-    if (!webContainer) {
-      getWebContainer().then((container) => {
-        setWebContainer(container);
-        console.log("container started");
-      });
+    // Initialize WebContainer with error handling
+    if (!webContainer && isWebContainerSupported) {
+      initializeWebContainer();
     }
 
     // Fetch project data and messages
@@ -451,53 +485,77 @@ const Project = () => {
             </div>
 
             <div className="actions flex gap-2">
-              <button
-                onClick={async () => {
-                  if (!webContainer) return;
-                  
-                  await webContainer.mount(fileTree);
+              {!isWebContainerSupported ? (
+                <div className="text-red-600 text-sm p-2">
+                  WebContainer not supported
+                </div>
+              ) : (
+                <button
+                  onClick={async () => {
+                    if (!webContainer) {
+                      console.error("WebContainer not initialized");
+                      return;
+                    }
+                    
+                    try {
+                      await webContainer.mount(fileTree);
 
-                  const installProcess = await webContainer.spawn("npm", [
-                    "install",
-                  ]);
+                      const installProcess = await webContainer.spawn("npm", [
+                        "install",
+                      ]);
 
-                  installProcess.output.pipeTo(
-                    new WritableStream({
-                      write(chunk) {
-                        console.log(chunk);
-                      },
-                    })
-                  );
+                      installProcess.output.pipeTo(
+                        new WritableStream({
+                          write(chunk) {
+                            console.log(chunk);
+                          },
+                        })
+                      );
 
-                  if (runProcess) {
-                    runProcess.kill();
-                  }
+                      if (runProcess) {
+                        runProcess.kill();
+                      }
 
-                  let tempRunProcess = await webContainer.spawn("npm", [
-                    "start",
-                  ]);
+                      let tempRunProcess = await webContainer.spawn("npm", [
+                        "start",
+                      ]);
 
-                  tempRunProcess.output.pipeTo(
-                    new WritableStream({
-                      write(chunk) {
-                        console.log(chunk);
-                      },
-                    })
-                  );
+                      tempRunProcess.output.pipeTo(
+                        new WritableStream({
+                          write(chunk) {
+                            console.log(chunk);
+                          },
+                        })
+                      );
 
-                  setRunProcess(tempRunProcess);
+                      setRunProcess(tempRunProcess);
 
-                  webContainer.on("server-ready", (port, url) => {
-                    console.log(port, url);
-                    setIframeUrl(url);
-                  });
-                }} 
-                className="p-2 px-4 bg-slate-600 text-white rounded"
-              >
-                Run
-              </button>
+                      webContainer.on("server-ready", (port, url) => {
+                        console.log(port, url);
+                        setIframeUrl(url);
+                      });
+                    } catch (error) {
+                      console.error("Error running project:", error);
+                      setWebContainerError(`Error running project: ${error.message}`);
+                    }
+                  }} 
+                  className="p-2 px-4 bg-slate-600 text-white rounded disabled:bg-gray-400"
+                  disabled={!webContainer}
+                >
+                  {webContainer ? "Run" : "Loading..."}
+                </button>
+              )}
             </div>
           </div>
+
+          {/* Error message display */}
+          {webContainerError && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded m-2">
+              <strong className="font-bold">WebContainer Error: </strong>
+              <span className="block sm:inline whitespace-pre-line">{webContainerError}</span>
+            </div>
+          )}
+
           <div className="bottom flex flex-grow max-w-full shrink overflow-auto">
             {fileTree[currentFile] && (
               <div className="code-editor-area h-full overflow-auto flex-grow bg-slate-50">
