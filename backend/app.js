@@ -43,7 +43,7 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",               // local dev
   "https://comm-sync-ai.vercel.app",
-  "https://comm-sync-ai-3vjv.vercel.app"     // your live Vercel frontend
+  "https://comm-sync-ai-3vjv-5s0kf088b-gaurav-prakashs-projects.vercel.app"     // your live Vercel frontend
 ];
 
 // ✅ Robust CORS middleware
