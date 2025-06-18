@@ -19,6 +19,5 @@ export async function getWebContainer() {
       throw error;
     }
   }
-  
   return webContainerInstance;
 }
