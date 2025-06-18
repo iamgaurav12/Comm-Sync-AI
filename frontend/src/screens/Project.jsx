@@ -10,7 +10,6 @@ import {
 } from "../config/socket";
 import Markdown from "markdown-to-jsx";
 import hljs from "highlight.js";
-import { getWebContainer } from "../config/webContainer";
 
 function SyntaxHighlightedCode(props) {
   const ref = useRef(null);
@@ -56,6 +55,7 @@ const Project = () => {
   const [iframeUrl, setIframeUrl] = useState(null);
   const [webContainerError, setWebContainerError] = useState(null);
   const [isWebContainerSupported, setIsWebContainerSupported] = useState(true);
+  const [webContainerLoading, setWebContainerLoading] = useState(false);
 
   const [runProcess, setRunProcess] = useState(null);
 
@@ -99,10 +99,9 @@ const Project = () => {
   // Function to get localStorage key for project messages
   const getMessagesStorageKey = () => `project_messages_${project._id}`;
 
-  // Function to save messages to localStorage
+  // Function to save messages to localStorage (with fallback)
   const saveMessagesToStorage = (messages) => {
     try {
-      // Use in-memory storage as fallback if localStorage is not available
       if (typeof Storage !== "undefined") {
         localStorage.setItem(getMessagesStorageKey(), JSON.stringify(messages));
       }
@@ -127,27 +126,23 @@ const Project = () => {
 
   // Add function to fetch messages from server
   function fetchProjectMessages() {
-    // First load messages from localStorage immediately
     const cachedMessages = loadMessagesFromStorage();
     if (cachedMessages.length > 0) {
       setMessages(cachedMessages);
     }
 
-    // Then try to fetch from server
     axios
       .get(`/projects/get-messages/${project._id}`)
       .then((res) => {
         console.log("Fetched messages from server:", res.data.messages);
         const serverMessages = res.data.messages || [];
         
-        // Merge server messages with cached messages (avoid duplicates)
         const mergedMessages = mergeMessages(cachedMessages, serverMessages);
         setMessages(mergedMessages);
         saveMessagesToStorage(mergedMessages);
       })
       .catch((err) => {
         console.log("Error fetching messages from server:", err);
-        // If server fails, use cached messages
         if (cachedMessages.length === 0) {
           setMessages([]);
         }
@@ -159,7 +154,6 @@ const Project = () => {
     const allMessages = [...cached];
     
     server.forEach(serverMsg => {
-      // Check if message already exists (simple check by content and sender)
       const exists = cached.some(cachedMsg => 
         cachedMsg.message === serverMsg.message && 
         cachedMsg.sender._id === serverMsg.sender._id &&
@@ -171,7 +165,6 @@ const Project = () => {
       }
     });
     
-    // Sort by timestamp if available
     return allMessages.sort((a, b) => {
       const aTime = new Date(a.timestamp || 0);
       const bTime = new Date(b.timestamp || 0);
@@ -185,17 +178,14 @@ const Project = () => {
     const messageData = {
       message,
       sender: user,
-      timestamp: new Date().toISOString(), // Add timestamp
+      timestamp: new Date().toISOString(),
     };
     
-    // Add message to local state immediately for better UX
     const updatedMessages = [...messages, messageData];
     setMessages(updatedMessages);
     
-    // Save to localStorage immediately
     saveMessagesToStorage(updatedMessages);
     
-    // Send message via socket
     sendMessage("project-message", messageData);
     
     setMessage("");
@@ -231,29 +221,78 @@ const Project = () => {
       });
   }
 
-  // Check if cross-origin isolation is enabled
+  // Enhanced cross-origin isolation check
   const checkCrossOriginIsolation = () => {
-    return typeof window !== 'undefined' && window.crossOriginIsolated;
+    if (typeof window === 'undefined') return false;
+
+    // Check if we're in a secure context
+    if (!window.isSecureContext) {
+      setWebContainerError("WebContainer requires a secure context (HTTPS). Please ensure your site is served over HTTPS.");
+      return false;
+    }
+
+    // Check if cross-origin isolation is enabled
+    if (!window.crossOriginIsolated) {
+      setWebContainerError(`WebContainer requires cross-origin isolation. 
+
+Current status:
+- Secure Context: ${window.isSecureContext ? '✅' : '❌'}
+- Cross-Origin Isolated: ${window.crossOriginIsolated ? '✅' : '❌'}
+
+Your server needs to send these headers:
+- Cross-Origin-Embedder-Policy: require-corp
+- Cross-Origin-Opener-Policy: same-origin
+
+Please check your server configuration.`);
+      return false;
+    }
+
+    return true;
   };
 
-  // Initialize WebContainer with error handling
+  // Enhanced WebContainer initialization
   const initializeWebContainer = async () => {
+    if (webContainerLoading || webContainer) return;
+    
+    setWebContainerLoading(true);
+    setWebContainerError(null);
+
     try {
-      // Check if cross-origin isolation is supported
+      // Check browser support first
+      if (typeof SharedArrayBuffer === 'undefined') {
+        throw new Error("SharedArrayBuffer is not supported in this browser");
+      }
+
       if (!checkCrossOriginIsolation()) {
-        setWebContainerError("WebContainer requires cross-origin isolation. Please ensure your server sends the following headers:\n- Cross-Origin-Embedder-Policy: require-corp\n- Cross-Origin-Opener-Policy: same-origin");
         setIsWebContainerSupported(false);
+        setWebContainerLoading(false);
         return;
       }
 
-      const container = await getWebContainer();
+      // Dynamic import to avoid loading WebContainer when not supported
+      const { WebContainer } = await import('@webcontainer/api');
+      
+      console.log("Initializing WebContainer...");
+      const container = await WebContainer.boot();
+      
       setWebContainer(container);
+      setIsWebContainerSupported(true);
       setWebContainerError(null);
       console.log("WebContainer initialized successfully");
+      
     } catch (error) {
       console.error("Failed to initialize WebContainer:", error);
-      setWebContainerError(`Failed to initialize WebContainer: ${error.message}`);
+      
+      let errorMessage = `Failed to initialize WebContainer: ${error.message}`;
+      
+      if (error.message.includes('SharedArrayBuffer')) {
+        errorMessage += "\n\nThis usually means cross-origin isolation is not properly configured.";
+      }
+      
+      setWebContainerError(errorMessage);
       setIsWebContainerSupported(false);
+    } finally {
+      setWebContainerLoading(false);
     }
   };
 
@@ -282,35 +321,30 @@ const Project = () => {
             setFileTree(messageData.fileTree || {});
           }
           
-          // Add AI message to state and save to localStorage
           setMessages((prevMessages) => {
             const updatedMessages = [...prevMessages, data];
             saveMessagesToStorage(updatedMessages);
             return updatedMessages;
           });
         } else {
-          // For non-AI messages, check if it's from current user
           if (data.sender._id !== user._id.toString()) {
-            // Only add if it's from another user (not current user)
             setMessages((prevMessages) => {
               const updatedMessages = [...prevMessages, data];
               saveMessagesToStorage(updatedMessages);
               return updatedMessages;
             });
           }
-          // If it's from current user, we already added it locally in send()
         }
       });
     }
 
-    // Initialize WebContainer with error handling
-    if (!webContainer && isWebContainerSupported) {
+    // Initialize WebContainer
+    if (!webContainer && isWebContainerSupported && !webContainerLoading) {
       initializeWebContainer();
     }
 
-    // Fetch project data and messages
     fetchProjectData();
-    fetchProjectMessages(); // Add this line to fetch messages on component mount
+    fetchProjectMessages();
 
     axios
       .get("/users/all")
@@ -321,14 +355,13 @@ const Project = () => {
         console.log(err);
       });
 
-    // Cleanup function
     return () => {
       if (socketInitialized.current) {
         disconnectSocket();
         socketInitialized.current = false;
       }
     };
-  }, [project?._id]); // Removed webContainer from dependencies
+  }, [project?._id]);
 
   function saveFileTree(ft) {
     axios
@@ -350,12 +383,10 @@ const Project = () => {
     }
   }
 
-  // Auto-scroll when messages change
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  // Save messages to localStorage whenever messages change
   useEffect(() => {
     if (messages.length > 0) {
       saveMessagesToStorage(messages);
@@ -384,7 +415,7 @@ const Project = () => {
           >
             {messages.map((msg, index) => (
               <div
-                key={`${msg.sender._id}-${index}-${msg.message.substring(0, 10)}`} // Better key
+                key={`${msg.sender._id}-${index}-${msg.message.substring(0, 10)}`}
                 className={`${
                   msg.sender._id === "ai" ? "max-w-80" : "max-w-52"
                 } ${
@@ -485,74 +516,89 @@ const Project = () => {
             </div>
 
             <div className="actions flex gap-2">
-              {!isWebContainerSupported ? (
-                <div className="text-red-600 text-sm p-2">
-                  WebContainer not supported
-                </div>
-              ) : (
-                <button
-                  onClick={async () => {
-                    if (!webContainer) {
-                      console.error("WebContainer not initialized");
+              <button
+                onClick={async () => {
+                  if (!webContainer) {
+                    if (!isWebContainerSupported) {
+                      alert("WebContainer is not supported in this environment");
                       return;
                     }
-                    
-                    try {
-                      await webContainer.mount(fileTree);
+                    console.error("WebContainer not initialized");
+                    return;
+                  }
+                  
+                  try {
+                    await webContainer.mount(fileTree);
 
-                      const installProcess = await webContainer.spawn("npm", [
-                        "install",
-                      ]);
+                    const installProcess = await webContainer.spawn("npm", [
+                      "install",
+                    ]);
 
-                      installProcess.output.pipeTo(
-                        new WritableStream({
-                          write(chunk) {
-                            console.log(chunk);
-                          },
-                        })
-                      );
+                    installProcess.output.pipeTo(
+                      new WritableStream({
+                        write(chunk) {
+                          console.log(chunk);
+                        },
+                      })
+                    );
 
-                      if (runProcess) {
-                        runProcess.kill();
-                      }
-
-                      let tempRunProcess = await webContainer.spawn("npm", [
-                        "start",
-                      ]);
-
-                      tempRunProcess.output.pipeTo(
-                        new WritableStream({
-                          write(chunk) {
-                            console.log(chunk);
-                          },
-                        })
-                      );
-
-                      setRunProcess(tempRunProcess);
-
-                      webContainer.on("server-ready", (port, url) => {
-                        console.log(port, url);
-                        setIframeUrl(url);
-                      });
-                    } catch (error) {
-                      console.error("Error running project:", error);
-                      setWebContainerError(`Error running project: ${error.message}`);
+                    if (runProcess) {
+                      runProcess.kill();
                     }
-                  }} 
-                  className="p-2 px-4 bg-slate-600 text-white rounded disabled:bg-gray-400"
-                  disabled={!webContainer}
-                >
-                  {webContainer ? "Run" : "Loading..."}
-                </button>
-              )}
+
+                    let tempRunProcess = await webContainer.spawn("npm", [
+                      "start",
+                    ]);
+
+                    tempRunProcess.output.pipeTo(
+                      new WritableStream({
+                        write(chunk) {
+                          console.log(chunk);
+                        },
+                      })
+                    );
+
+                    setRunProcess(tempRunProcess);
+
+                    webContainer.on("server-ready", (port, url) => {
+                      console.log(port, url);
+                      setIframeUrl(url);
+                    });
+                  } catch (error) {
+                    console.error("Error running project:", error);
+                    setWebContainerError(`Error running project: ${error.message}`);
+                  }
+                }} 
+                className="p-2 px-4 bg-slate-600 text-white rounded disabled:bg-gray-400 disabled:cursor-not-allowed"
+                disabled={!webContainer || webContainerLoading}
+              >
+                {webContainerLoading ? "Loading..." : webContainer ? "Run" : "WebContainer Unavailable"}
+              </button>
             </div>
           </div>
 
-          {/* Error message display */}
+          {/* Enhanced error message display */}
           {webContainerError && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded m-2">
-              <strong className="font-bold">WebContainer Error: </strong>
-              <span className="block sm:inline whitespace-pre-line">{webContainerError}</span>
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <i className="ri-error-warning-line text-red-500 text-xl"></i>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-semibold">WebContainer Error</h3>
+                  <div className="mt-2 text-sm whitespace-pre-line">{webContainerError}</div>
+                  {!isWebContainerSupported && (
+                    <div className="mt-3">
+                      <button 
+                        onClick={initializeWebContainer}
+                        className="text-sm bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
+                      >
+                        Retry Initialization
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
