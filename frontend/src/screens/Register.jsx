@@ -2,40 +2,78 @@ import React, { useState, useContext } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { UserContext } from "../context/user.context";
 import axios from "../config/axios";
+import { generateOTP, sendOTP, storeOTP } from "../utils/otpUtils";
+import OTPVerification from "./OTPVerification";
 
 const Register = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
+  const [showOTPVerification, setShowOTPVerification] = useState(false);
+  const [userData, setUserData] = useState(null);
+  const [error, setError] = useState("");
 
-  const { login } = useContext(UserContext); // Use login function from context
-
+  const { login } = useContext(UserContext);
   const navigate = useNavigate();
 
   function submitHandler(e) {
     e.preventDefault();
     setIsLoading(true);
+    setError("");
 
     axios
       .post("/users/register", {
         email,
         password,
       })
-      .then((res) => {
+      .then(async (res) => {
         console.log(res.data);
         
-        // Use the login function from context instead of manual localStorage
-        login(res.data.user, res.data.token);
+        // Store user data temporarily
+        setUserData(res.data);
         
-        navigate("/");
+        // Generate and send OTP
+        const otp = generateOTP();
+        const otpResult = await sendOTP(email, otp);
+        
+        if (otpResult.success) {
+          // Store OTP for verification
+          storeOTP(email, otp);
+          setShowOTPVerification(true);
+        } else {
+          setError("Failed to send OTP. Please try again.");
+        }
       })
       .catch((err) => {
-        console.log(err.response.data);
+        console.log(err.response?.data);
+        setError(err.response?.data?.message || "Registration failed. Please try again.");
       })
       .finally(() => {
         setIsLoading(false);
       });
+  }
+
+  const handleOTPVerified = () => {
+    // Login user after OTP verification
+    login(userData.user, userData.token);
+    navigate("/");
+  };
+
+  const handleBackToRegister = () => {
+    setShowOTPVerification(false);
+    setUserData(null);
+    setError("");
+  };
+
+  if (showOTPVerification) {
+    return (
+      <OTPVerification
+        email={email}
+        onVerified={handleOTPVerified}
+        onBack={handleBackToRegister}
+      />
+    );
   }
 
   return (
@@ -104,6 +142,20 @@ const Register = () => {
             </div>
           </div>
 
+          {/* Error Message */}
+          {error && (
+            <div className="p-4 rounded-xl bg-red-900/50 border border-red-700/50 backdrop-blur-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center">
+                  <svg className="w-3 h-3 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+                <span className="text-red-300 text-sm">{error}</span>
+              </div>
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={isLoading}
@@ -112,7 +164,7 @@ const Register = () => {
             {isLoading ? (
               <div className="flex items-center justify-center space-x-2">
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                <span>Creating Account...</span>
+                <span>Sending OTP...</span>
               </div>
             ) : (
               <span className="flex items-center justify-center space-x-2">
