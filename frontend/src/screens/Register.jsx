@@ -57,7 +57,7 @@ const Register = () => {
   const handleOTPVerified = () => {
     // Login user after OTP verification
     login(userData.user, userData.token);
-    navigate("/");
+    navigate("/home");
   };
 
   const handleBackToRegister = () => {
