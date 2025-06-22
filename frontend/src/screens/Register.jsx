@@ -11,7 +11,7 @@ const Register = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
   const [showOTPVerification, setShowOTPVerification] = useState(false);
-  const [userData, setUserData] = useState(null);
+  const [tempUserData, setTempUserData] = useState(null); // Store form data temporarily
   const [error, setError] = useState("");
 
   const { login } = useContext(UserContext);
@@ -22,16 +22,11 @@ const Register = () => {
     setIsLoading(true);
     setError("");
 
-    axios
-      .post("/users/register", {
-        email,
-        password,
-      })
-      .then(async (res) => {
-        console.log(res.data);
-        
-        // Store user data temporarily
-        setUserData(res.data);
+    // Don't register user yet - just send OTP
+    const sendOTPOnly = async () => {
+      try {
+        // Store user data temporarily (not in database yet)
+        setTempUserData({ email, password });
         
         // Generate and send OTP
         const otp = generateOTP();
@@ -44,25 +39,52 @@ const Register = () => {
         } else {
           setError("Failed to send OTP. Please try again.");
         }
-      })
-      .catch((err) => {
-        console.log(err.response?.data);
-        setError(err.response?.data?.message || "Registration failed. Please try again.");
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+      } catch (err) {
+        console.log(err);
+        setError("Failed to send OTP. Please try again.");
+      }
+    };
+
+    sendOTPOnly().finally(() => {
+      setIsLoading(false);
+    });
   }
 
-  const handleOTPVerified = () => {
-    // Login user after OTP verification
-    login(userData.user, userData.token);
-    navigate("/home");
+  const handleOTPVerified = async () => {
+    // Now register the user in database after OTP verification
+    setIsLoading(true);
+    
+    try {
+      const response = await axios.post("/users/register", {
+        email: tempUserData.email,
+        password: tempUserData.password,
+      });
+      
+      console.log(response.data);
+      
+      // Login user after successful registration
+      login(response.data.user, response.data.token);
+      navigate("/home");
+    } catch (err) {
+      console.log(err.response?.data);
+      // Handle email already exists error or other registration errors
+      const errorMessage = err.response?.data?.message || "Registration failed. Please try again.";
+      
+      if (errorMessage.toLowerCase().includes('email') && errorMessage.toLowerCase().includes('exist')) {
+        setError("Email already registered. Please use a different email.");
+      } else {
+        setError(errorMessage);
+      }
+      
+      setShowOTPVerification(false); // Go back to registration form
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleBackToRegister = () => {
     setShowOTPVerification(false);
-    setUserData(null);
+    setTempUserData(null);
     setError("");
   };
 
@@ -72,6 +94,7 @@ const Register = () => {
         email={email}
         onVerified={handleOTPVerified}
         onBack={handleBackToRegister}
+        isLoading={isLoading}
       />
     );
   }
@@ -168,7 +191,7 @@ const Register = () => {
               </div>
             ) : (
               <span className="flex items-center justify-center space-x-2">
-                <span>Create Account</span>
+                <span>Send OTP</span>
                 <svg className="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
