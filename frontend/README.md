@@ -42,7 +42,7 @@ frontend/
 ## 🛠️ Getting Started
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (v18+ recommended)
+- [Node.js](https://nodejs.org/) (v20+ recommended)
 - [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
 
 ### Installation
@@ -85,7 +85,6 @@ yarn preview
 Create a `.env` file in the `frontend/` directory for custom environment variables. Example:
 ```
 VITE_API_URL=http://localhost:5000
-VITE_SOCKET_URL=http://localhost:5000
 ```
 
 ---

@@ -20,7 +20,7 @@ Comm-Sync-AI is a collaborative platform that integrates AI-powered assistance f
 ### Steps
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/iamgaurav12/Comm-Sync-AI
    cd Comm-Sync-AI
    ```
 
