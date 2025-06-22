@@ -44,15 +44,12 @@ const OTPVerification = ({ email, storedOTP, onVerified, onBack, onResendOTP, is
     setLoading(true);
     setError("");
 
-    console.log("Entered OTP:", otp);
-    console.log("Stored OTP:", storedOTP);
+    
 
     // Verify OTP directly by comparing with storedOTP
     if (otp === storedOTP) {
-      console.log("OTP verification successful");
       onVerified();
     } else {
-      console.log("OTP verification failed");
       setError("Invalid OTP. Please try again.");
     }
 

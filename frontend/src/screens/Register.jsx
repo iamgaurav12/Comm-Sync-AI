@@ -31,20 +31,17 @@ const Register = () => {
         
         // Generate and send OTP
         const otp = generateOTP();
-        console.log("Generated OTP:", otp); // Debug log
         
         const otpResult = await sendOTP(email, otp);
         
         if (otpResult.success) {
           // Store OTP in React state instead of localStorage
           setStoredOTP(otp);
-          console.log("OTP stored successfully:", otp); // Debug log
           setShowOTPVerification(true);
         } else {
           setError("Failed to send OTP. Please try again.");
         }
       } catch (err) {
-        console.log("Error sending OTP:", err);
         setError("Failed to send OTP. Please try again.");
       }
     };
@@ -64,13 +61,11 @@ const Register = () => {
         password: tempUserData.password,
       });
       
-      console.log(response.data);
       
       // Login user after successful registration
       login(response.data.user, response.data.token);
       navigate("/home");
     } catch (err) {
-      console.log(err.response?.data);
       // Handle email already exists error or other registration errors
       const errorMessage = err.response?.data?.message || "Registration failed. Please try again.";
       
@@ -100,13 +95,11 @@ const Register = () => {
       
       if (result.success) {
         setStoredOTP(newOTP);
-        console.log("New OTP generated and stored:", newOTP);
         return { success: true };
       } else {
         return { success: false, message: result.message };
       }
     } catch (err) {
-      console.log("Error resending OTP:", err);
       return { success: false, message: "Failed to resend OTP" };
     }
   };

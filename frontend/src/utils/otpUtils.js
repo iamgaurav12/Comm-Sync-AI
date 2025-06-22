@@ -26,7 +26,6 @@ export const sendOTP = async (email, otp) => {
       EMAILJS_PUBLIC_KEY
     );
 
-    console.log('OTP sent successfully:', response);
     return { success: true, message: 'OTP sent successfully' };
   } catch (error) {
     console.error('Failed to send OTP:', error);
