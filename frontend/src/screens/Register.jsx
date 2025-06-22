@@ -2,7 +2,7 @@ import React, { useState, useContext } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { UserContext } from "../context/user.context";
 import axios from "../config/axios";
-import { generateOTP, sendOTP, storeOTP } from "../utils/otpUtils";
+import { generateOTP, sendOTP } from "../utils/otpUtils";
 import OTPVerification from "./OTPVerification";
 
 const Register = () => {
@@ -12,6 +12,7 @@ const Register = () => {
   const [focusedField, setFocusedField] = useState(null);
   const [showOTPVerification, setShowOTPVerification] = useState(false);
   const [tempUserData, setTempUserData] = useState(null); // Store form data temporarily
+  const [storedOTP, setStoredOTP] = useState(null); // Store OTP in React state
   const [error, setError] = useState("");
 
   const { login } = useContext(UserContext);
@@ -30,17 +31,20 @@ const Register = () => {
         
         // Generate and send OTP
         const otp = generateOTP();
+        console.log("Generated OTP:", otp); // Debug log
+        
         const otpResult = await sendOTP(email, otp);
         
         if (otpResult.success) {
-          // Store OTP for verification
-          storeOTP(email, otp);
+          // Store OTP in React state instead of localStorage
+          setStoredOTP(otp);
+          console.log("OTP stored successfully:", otp); // Debug log
           setShowOTPVerification(true);
         } else {
           setError("Failed to send OTP. Please try again.");
         }
       } catch (err) {
-        console.log(err);
+        console.log("Error sending OTP:", err);
         setError("Failed to send OTP. Please try again.");
       }
     };
@@ -85,15 +89,36 @@ const Register = () => {
   const handleBackToRegister = () => {
     setShowOTPVerification(false);
     setTempUserData(null);
+    setStoredOTP(null); // Clear stored OTP
     setError("");
+  };
+
+  const handleResendOTP = async () => {
+    try {
+      const newOTP = generateOTP();
+      const result = await sendOTP(email, newOTP);
+      
+      if (result.success) {
+        setStoredOTP(newOTP);
+        console.log("New OTP generated and stored:", newOTP);
+        return { success: true };
+      } else {
+        return { success: false, message: result.message };
+      }
+    } catch (err) {
+      console.log("Error resending OTP:", err);
+      return { success: false, message: "Failed to resend OTP" };
+    }
   };
 
   if (showOTPVerification) {
     return (
       <OTPVerification
         email={email}
+        storedOTP={storedOTP}
         onVerified={handleOTPVerified}
         onBack={handleBackToRegister}
+        onResendOTP={handleResendOTP}
         isLoading={isLoading}
       />
     );
