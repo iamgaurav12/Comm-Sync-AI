@@ -28,7 +28,7 @@ const Login = () => {
         // Use the login function from context instead of manual localStorage
         login(res.data.user, res.data.token);
 
-        navigate("/");
+        navigate("/home");
       })
       .catch((err) => {
         console.log(err.response.data);

@@ -9,50 +9,106 @@ const Logout = () => {
   const [status, setStatus] = useState("Clearing session...");
 
   useEffect(() => {
-    const performLogout = async () => {
+    const performCompleteLogout = async () => {
+  try {
+    // Simulate logout progress with more comprehensive steps
+    const steps = [
+      { message: "Clearing session data...", delay: 300 },
+      { message: "Removing local storage...", delay: 400 },
+      { message: "Clearing cookies...", delay: 500 },
+      { message: "Cleaning cache storage...", delay: 600 },
+      { message: "Securing logout...", delay: 400 },
+      { message: "Finalizing cleanup...", delay: 300 },
+      { message: "Logout complete!", delay: 200 }
+    ];
+
+    for (let i = 0; i < steps.length; i++) {
+      setStatus(steps[i].message);
+      setProgress(((i + 1) / steps.length) * 100);
+      await new Promise(resolve => setTimeout(resolve, steps[i].delay));
+    }
+
+    // 1. Clear React context
+    setUser(null);
+    
+    // 2. Clear localStorage completely
+    localStorage.clear();
+    
+    // 3. Clear sessionStorage
+    sessionStorage.clear();
+    
+    // 4. Clear all cookies
+    document.cookie.split(";").forEach(function(c) { 
+      document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+    });
+    
+    // 5. Clear IndexedDB (if used)
+    if ('indexedDB' in window) {
       try {
-        // Simulate logout progress
-        const steps = [
-          { message: "Clearing session...", delay: 300 },
-          { message: "Removing user data...", delay: 400 },
-          { message: "Securing logout...", delay: 500 },
-          { message: "Almost done...", delay: 400 },
-          { message: "Logout complete!", delay: 300 }
-        ];
-
-        for (let i = 0; i < steps.length; i++) {
-          setStatus(steps[i].message);
-          setProgress(((i + 1) / steps.length) * 100);
-          await new Promise(resolve => setTimeout(resolve, steps[i].delay));
-        }
-
-        // Clear user context
-        setUser(null);
-        
-        // Clear any local storage/session storage if used
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        sessionStorage.clear();
-        
-        console.log("User logged out successfully");
-        
-        // Redirect to login page after completion
-        setTimeout(() => {
-          navigate("/login", { replace: true });
-        }, 500);
-        
+        const databases = await indexedDB.databases();
+        await Promise.all(
+          databases.map(db => {
+            return new Promise((resolve, reject) => {
+              const deleteReq = indexedDB.deleteDatabase(db.name);
+              deleteReq.onsuccess = () => resolve();
+              deleteReq.onerror = () => reject(deleteReq.error);
+            });
+          })
+        );
       } catch (error) {
-        console.error("Logout error:", error);
-        setStatus("Logout error occurred");
-        
-        // Fallback: still redirect even if there's an error
-        setTimeout(() => {
-          navigate("/login", { replace: true });
-        }, 1500);
+        console.warn("Could not clear IndexedDB:", error);
       }
-    };
+    }
+    
+    // 6. Clear Cache API storage
+    if ('caches' in window) {
+      try {
+        const cacheNames = await caches.keys();
+        await Promise.all(
+          cacheNames.map(cacheName => caches.delete(cacheName))
+        );
+      } catch (error) {
+        console.warn("Could not clear cache storage:", error);
+      }
+    }
+    
+    // 7. (Removed backend logout request)
+    // 8. Clear any Web SQL (deprecated but might be used)
+    if (window.openDatabase) {
+      try {
+        // This is deprecated and not recommended for new applications
+        console.log("Web SQL detected but not cleared (deprecated)");
+      } catch (error) {
+        console.warn("Web SQL clearing failed:", error);
+      }
+    }
+    
+    // 9. Notify service worker to clear its data (if applicable)
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'CLEAR_ALL_DATA'
+      });
+    }
+    
+    console.log("Complete logout performed successfully");
+    
+    // 10. Use navigate to redirect to login page (no reload)
+    setTimeout(() => {
+      navigate("/login");
+    }, 500);
+    
+  } catch (error) {
+    console.error("Logout error:", error);
+    setStatus("Logout error occurred");
+    
+    // Fallback: still redirect even if there's an error
+    setTimeout(() => {
+      navigate("/login");
+    }, 1500);
+  }
+};
 
-    performLogout();
+    performCompleteLogout();
   }, [navigate, setUser]);
 
   return (
