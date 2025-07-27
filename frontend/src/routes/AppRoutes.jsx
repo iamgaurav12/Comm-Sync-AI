@@ -7,6 +7,7 @@ import Project from "../screens/Project";
 import Intro from "../screens/Intro";
 import Logout from "../screens/Logout";
 import UserAuth from "../auth/UserAuth";
+import FileManager from "../screens/FileManager";
 
 const AppRoutes = () => {
   return (
@@ -14,7 +15,7 @@ const AppRoutes = () => {
       <Routes>
         {/* Public intro page - first thing users see */}
         <Route path="/" element={<Intro />} />
-        
+        <Route path="/files" element={<FileManager/>} />
         {/* Authenticated home page */}
         <Route
           path="/home"
