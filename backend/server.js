@@ -14,17 +14,21 @@ const allowedOrigins = [
   "http://localhost:5173",
   "https://comm-sync-ai.vercel.app",
   "https://comm-sync-ai-3vjv-5s0kf088b-gaurav-prakashs-projects.vercel.app",
-  "https://comm-sync-ai-3vjv.vercel.app"
+  "https://comm-sync-ai-3vjv.vercel.app",
+  "https://new-comm-sync-ai.vercel.app"
 ];
 
 const server = http.createServer(app);
 
+// ✅ Enhanced Socket.IO CORS configuration
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
     methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type", "Authorization"]
-  }
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
+    credentials: true
+  },
+  allowEIO3: true // Enable Engine.IO v3 compatibility if needed
 });
 
 // ✅ Auth middleware
@@ -51,6 +55,7 @@ io.use(async (socket, next) => {
     socket.user = decoded;
     next();
   } catch (error) {
+    console.error('Socket auth error:', error);
     next(error);
   }
 });
@@ -77,34 +82,39 @@ const saveMessageToDb = async (projectId, messageData) => {
 // ✅ Socket events
 io.on('connection', socket => {
   socket.roomId = socket.project._id.toString();
-  console.log('a user connected');
+  console.log('✅ User connected from:', socket.handshake.headers.origin);
   socket.join(socket.roomId);
 
   socket.on('project-message', async data => {
-    const message = data.message;
+    try {
+      const message = data.message;
 
-    // 🆕 Save user message to database
-    await saveMessageToDb(socket.project._id, data);
+      // 🆕 Save user message to database
+      await saveMessageToDb(socket.project._id, data);
 
-    const aiIsPresentInMessage = message.includes('@ai');
-    socket.broadcast.to(socket.roomId).emit('project-message', data);
+      const aiIsPresentInMessage = message.includes('@ai');
+      socket.broadcast.to(socket.roomId).emit('project-message', data);
 
-    if (aiIsPresentInMessage) {
-      const prompt = message.replace('@ai', '');
-      const result = await generateResult(prompt);
+      if (aiIsPresentInMessage) {
+        const prompt = message.replace('@ai', '');
+        const result = await generateResult(prompt);
 
-      const aiMessage = {
-        message: result,
-        sender: {
-          _id: 'ai',
-          email: 'AI'
-        }
-      };
+        const aiMessage = {
+          message: result,
+          sender: {
+            _id: 'ai',
+            email: 'AI'
+          }
+        };
 
-      // 🆕 Save AI message to database
-      await saveMessageToDb(socket.project._id, aiMessage);
+        // 🆕 Save AI message to database
+        await saveMessageToDb(socket.project._id, aiMessage);
 
-      io.to(socket.roomId).emit('project-message', aiMessage);
+        io.to(socket.roomId).emit('project-message', aiMessage);
+      }
+    } catch (error) {
+      console.error('❌ Error handling project message:', error);
+      socket.emit('error', { message: 'Failed to process message' });
     }
   });
 
@@ -115,5 +125,6 @@ io.on('connection', socket => {
 });
 
 server.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+  console.log(`🚀 Server is running on port ${port}`);
+  console.log(`📋 Allowed origins:`, allowedOrigins);
 });

@@ -11,6 +11,210 @@ import {
 import Markdown from "markdown-to-jsx";
 import hljs from "highlight.js";
 
+// File Upload Component for Chat
+const ChatFileUpload = ({ onFileUpload, isUploading }) => {
+  const fileInputRef = useRef(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleFileSelect = (files) => {
+    if (files && files.length > 0) {
+      onFileUpload(Array.from(files));
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = e.dataTransfer.files;
+    handleFileSelect(files);
+  };
+
+  return (
+    <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        accept="image/*,.pdf,.doc,.docx,.txt,.zip,.rar,.js,.jsx,.ts,.tsx,.html,.css,.json,.md"
+        onChange={(e) => handleFileSelect(e.target.files)}
+      />
+      
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        disabled={isUploading}
+        className={`p-2 rounded-lg transition-all duration-200 ${
+          isUploading 
+            ? "text-gray-500 cursor-not-allowed" 
+            : "text-gray-400 hover:text-blue-400 hover:bg-gray-700/50"
+        }`}
+        title="Upload files"
+      >
+        {isUploading ? (
+          <div className="w-5 h-5 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
+        ) : (
+          <i className="ri-attachment-2 text-lg"></i>
+        )}
+      </button>
+
+      {/* Drag and Drop Overlay */}
+      {dragOver && (
+        <div
+          className="fixed inset-0 bg-blue-600/20 backdrop-blur-sm flex items-center justify-center z-50"
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <div className="bg-gray-800 border-2 border-dashed border-blue-400 rounded-xl p-8 text-center">
+            <i className="ri-upload-cloud-2-line text-4xl text-blue-400 mb-4"></i>
+            <p className="text-blue-400 font-medium">Drop files here to upload</p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+// Enhanced File Message Component
+const FileMessage = ({ file, sender, isOwn, onDelete, currentUser }) => {
+  const getFileIcon = (fileName) => {
+    const extension = fileName?.split(".")?.pop()?.toLowerCase() || '';
+    const iconMap = {
+      pdf: "📄", doc: "📝", docx: "📝", txt: "📄",
+      zip: "🗜️", rar: "🗜️",
+      jpg: "🖼️", jpeg: "🖼️", png: "🖼️", gif: "🖼️", webp: "🖼️",
+      js: "📜", jsx: "⚛️", ts: "📘", tsx: "⚛️",
+      html: "🌐", css: "🎨", json: "📋", md: "📖"
+    };
+    return iconMap[extension] || "📎";
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return "Unknown size";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
+  const handleDownload = async () => {
+    try {
+      if (file.fileUrl || file.url) {
+        const downloadUrl = file.fileUrl || file.url;
+        
+        // Use fetch to download the file
+        const response = await fetch(downloadUrl);
+        if (!response.ok) throw new Error('Download failed');
+        
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = file.originalName || file.filename || file.name || 'download';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Clean up the blob URL
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      // Fallback: try opening in new tab
+      if (file.fileUrl || file.url) {
+        window.open(file.fileUrl || file.url, '_blank');
+      }
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm('Are you sure you want to delete this file? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      // Get API URL from environment variables
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      
+      // Delete from server using the fileKey
+      const fileKey = file.fileKey || file.key;
+      if (fileKey) {
+        const response = await fetch(`${API_URL}/api/files/delete/${encodeURIComponent(fileKey)}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to delete file from server');
+        }
+      }
+      
+      // Call the delete callback to remove from UI
+      if (onDelete) {
+        onDelete();
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert('Failed to delete file. Please try again.');
+    }
+  };
+
+  return (
+    <div className={`file-message border border-gray-600 rounded-lg p-3 max-w-sm ${
+      isOwn ? "bg-blue-700/30" : "bg-gray-700/50"
+    }`}>
+      <div className="flex items-center gap-3">
+        <div className="text-2xl">{getFileIcon(file.originalName || file.filename || file.name)}</div>
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-sm truncate">{file.originalName || file.filename || file.name}</p>
+          <p className="text-xs text-gray-400">{formatFileSize(file.fileSize || file.size)}</p>
+        </div>
+      </div>
+      
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={handleDownload}
+          className="flex-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs font-medium transition-colors"
+          title="Download file"
+        >
+          <i className="ri-download-line mr-1"></i>
+          Download
+        </button>
+        {(file.fileUrl || file.url) && (
+          <button
+            onClick={() => window.open(file.fileUrl || file.url, '_blank')}
+            className="flex-1 px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-xs font-medium transition-colors"
+            title="Open in new tab"
+          >
+            <i className="ri-external-link-line mr-1"></i>
+            Open
+          </button>
+        )}
+        {/* Show delete button only for file owner */}
+        {isOwn && (
+          <button
+            onClick={handleDelete}
+            className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-xs font-medium transition-colors"
+            title="Delete file"
+          >
+            <i className="ri-delete-bin-line"></i>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
 function SyntaxHighlightedCode(props) {
   const ref = useRef(null);
 
@@ -44,6 +248,10 @@ const Project = () => {
   const { user } = useContext(UserContext);
   const messageBox = useRef(null);
 
+  // File upload states
+  const [isFileUploading, setIsFileUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
   const [users, setUsers] = useState([]);
   const [messages, setMessages] = useState([]);
   const [fileTree, setFileTree] = useState({});
@@ -66,6 +274,74 @@ const Project = () => {
   if (!project) {
     return <div className="h-screen w-screen bg-gray-900 text-white flex items-center justify-center">Loading...</div>;
   }
+
+  // Get API URL from environment variables
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+  // Function to delete a message (for file messages)
+  const deleteMessage = (messageIndex) => {
+    const updatedMessages = messages.filter((_, index) => index !== messageIndex);
+    setMessages(updatedMessages);
+    saveMessagesToStorage(updatedMessages);
+  };
+
+  // File upload handler
+  const handleFileUpload = async (files) => {
+    if (!files || files.length === 0) return;
+
+    setIsFileUploading(true);
+    setUploadProgress(0);
+
+    try {
+      const uploadPromises = files.map(async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${API_URL}/api/files/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Upload failed for ${file.name}`);
+        }
+
+        const result = await response.json();
+        return {
+          ...result.file,
+          originalName: file.name,
+          type: 'file'
+        };
+      });
+
+      const uploadedFiles = await Promise.all(uploadPromises);
+      
+      // Send file messages to chat
+      uploadedFiles.forEach(file => {
+        const fileMessage = {
+          message: `📎 Shared file: ${file.originalName}`,
+          sender: user,
+          timestamp: new Date().toISOString(),
+          file: file,
+          type: 'file'
+        };
+
+        const updatedMessages = [...messages, fileMessage];
+        setMessages(updatedMessages);
+        saveMessagesToStorage(updatedMessages);
+        sendMessage("project-message", fileMessage);
+      });
+
+      setUploadProgress(100);
+      
+    } catch (error) {
+      console.error('File upload error:', error);
+      // Could add error notification here
+    } finally {
+      setIsFileUploading(false);
+      setTimeout(() => setUploadProgress(0), 1000);
+    }
+  };
 
   const handleUserClick = (id) => {
     setSelectedUserId((prevSelectedUserId) => {
@@ -225,13 +501,11 @@ const Project = () => {
   const checkCrossOriginIsolation = () => {
     if (typeof window === 'undefined') return false;
 
-    // Check if we're in a secure context
     if (!window.isSecureContext) {
       setWebContainerError("WebContainer requires a secure context (HTTPS). Please ensure your site is served over HTTPS.");
       return false;
     }
 
-    // Check if cross-origin isolation is enabled
     if (!window.crossOriginIsolated) {
       setWebContainerError(`WebContainer requires cross-origin isolation. 
 
@@ -258,7 +532,6 @@ Please check your server configuration.`);
     setWebContainerError(null);
 
     try {
-      // Check browser support first
       if (typeof SharedArrayBuffer === 'undefined') {
         throw new Error("SharedArrayBuffer is not supported in this browser");
       }
@@ -269,7 +542,6 @@ Please check your server configuration.`);
         return;
       }
 
-      // Dynamic import to avoid loading WebContainer when not supported
       const { WebContainer } = await import('@webcontainer/api');
       
       console.log("Initializing WebContainer...");
@@ -408,10 +680,29 @@ Please check your server configuration.`);
             <i className="ri-group-fill text-lg"></i>
           </button>
         </header>
-        <div className="conversation-area pt-16 pb-12 flex-grow flex flex-col h-full relative">
+        
+        <div className="conversation-area pt-16 pb-20 flex-grow flex flex-col h-full relative">
+          {/* Upload Progress Bar */}
+          {isFileUploading && (
+            <div className="absolute top-0 left-0 right-0 bg-gray-800 border-b border-gray-700 p-2 z-10">
+              <div className="flex items-center gap-2 text-sm text-gray-300">
+                <i className="ri-upload-line"></i>
+                <span>Uploading files...</span>
+              </div>
+              <div className="w-full bg-gray-700 rounded-full h-1 mt-1">
+                <div 
+                  className="bg-blue-600 h-1 rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
+
           <div
             ref={messageBox}
-            className="message-box p-4 flex-grow flex flex-col gap-3 overflow-auto max-h-full scrollbar-hide"
+            className={`message-box p-4 flex-grow flex flex-col gap-3 overflow-auto max-h-full scrollbar-hide ${
+              isFileUploading ? 'pt-16' : ''
+            }`}
           >
             {messages.map((msg, index) => (
               <div
@@ -439,6 +730,14 @@ Please check your server configuration.`);
                   <div className="text-sm">
                     {msg.sender._id === "ai" ? (
                       WriteAiMessage(msg.message)
+                    ) : msg.type === 'file' && msg.file ? (
+                      <FileMessage 
+                        file={msg.file} 
+                        sender={msg.sender}
+                        isOwn={msg.sender._id === user._id.toString()}
+                        onDelete={() => deleteMessage(index)}
+                        currentUser={user}
+                      />
                     ) : (
                       <p>{msg.message}</p>
                     )}
@@ -449,19 +748,24 @@ Please check your server configuration.`);
           </div>
 
           <div className="inputField w-full flex absolute bottom-0 bg-gray-800 border-t border-gray-700 shadow-lg">
+            <ChatFileUpload 
+              onFileUpload={handleFileUpload}
+              isUploading={isFileUploading}
+            />
             <input
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && send()}
               className="p-4 border-none outline-none flex-grow bg-gray-800 text-gray-100 placeholder-gray-400"
               type="text"
-              placeholder="Type your message..."
+              placeholder="Type your message or upload files..."
             />
             <button onClick={send} className="px-6 bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 transition-all duration-200">
               <i className="ri-send-plane-fill"></i>
             </button>
           </div>
         </div>
+        
         <div
           className={`sidePanel w-full h-full flex flex-col gap-2 bg-gray-800/95 backdrop-blur-sm absolute transition-all duration-300 ${
             isSidePanelOpen ? "translate-x-0" : "-translate-x-full"
@@ -496,6 +800,7 @@ Please check your server configuration.`);
       </section>
 
       <section className="right bg-gray-900 flex-grow h-full flex">
+        {/* Rest of your existing code for the right section... */}
         <div className="explorer h-full max-w-64 min-w-52 bg-gradient-to-b from-gray-800 to-gray-900 border-r border-gray-700">
           <div className="file-tree w-full">
             {Object.keys(fileTree).map((file, index) => (
