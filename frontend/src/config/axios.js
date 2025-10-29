@@ -41,9 +41,26 @@ axiosInstance.interceptors.response.use(
     
     // Handle auth errors
     if (error.response?.status === 401) {
-      localStorage.removeItem("token");
-      // Optionally redirect to login
-      // window.location.href = '/login';
+      // Check if this is a token expiration error
+      const token = localStorage.getItem("token");
+      if (token) {
+        try {
+          const tokenData = JSON.parse(atob(token.split('.')[1]));
+          const expirationTime = tokenData.exp * 1000;
+          
+          if (Date.now() >= expirationTime) {
+            console.log("Token expired");
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+            window.location.href = '/login';
+          }
+        } catch (error) {
+          console.error("Error checking token expiration:", error);
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          window.location.href = '/login';
+        }
+      }
     }
     
     return Promise.reject(error);

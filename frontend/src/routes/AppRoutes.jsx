@@ -6,23 +6,44 @@ import Home from "../screens/Home";
 import Project from "../screens/Project";
 import Intro from "../screens/Intro";
 import Logout from "../screens/Logout";
-import UserAuth from "../auth/UserAuth";
+import RequireAuth from "../auth/RequireAuth";
 import FileManager from "../screens/FileManager";
 
 const AppRoutes = () => {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public intro page - first thing users see */}
-        <Route path="/" element={<Intro />} />
-        <Route path="/files" element={<FileManager/>} />
-        {/* Authenticated home page */}
+        {/* Root route redirects to home if authenticated, otherwise to intro */}
+        <Route
+          path="/"
+          element={
+            <RequireAuth>
+              <Home />
+            </RequireAuth>
+          }
+        />
+        
+        {/* Public routes */}
+        <Route path="/intro" element={<Intro />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/logout" element={<Logout />} />
+        
+        {/* Protected routes */}
+        <Route
+          path="/files"
+          element={
+            <RequireAuth>
+              <FileManager />
+            </RequireAuth>
+          }
+        />
         <Route
           path="/home"
           element={
-            <UserAuth>
+            <RequireAuth>
               <Home />
-            </UserAuth>
+            </RequireAuth>
           }
         />
         
@@ -35,9 +56,9 @@ const AppRoutes = () => {
         <Route
           path="/project"
           element={
-            <UserAuth>
+            <RequireAuth>
               <Project />
-            </UserAuth>
+            </RequireAuth>
           }
         />
       </Routes>

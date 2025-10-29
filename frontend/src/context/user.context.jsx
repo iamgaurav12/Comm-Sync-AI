@@ -15,9 +15,21 @@ export const UserProvider = ({ children }) => {
     
     if (token && storedUser) {
       try {
-        setUser(JSON.parse(storedUser));
+        // Validate token expiration
+        const tokenData = JSON.parse(atob(token.split('.')[1]));
+        const expirationTime = tokenData.exp * 1000; // Convert to milliseconds
+        
+        if (Date.now() >= expirationTime) {
+          // Token has expired
+          console.log("Token expired, logging out");
+          localStorage.removeItem("user");
+          localStorage.removeItem("token");
+        } else {
+          // Token is still valid
+          setUser(JSON.parse(storedUser));
+        }
       } catch (error) {
-        console.error("Error parsing stored user:", error);
+        console.error("Error parsing stored user or token:", error);
         localStorage.removeItem("user");
         localStorage.removeItem("token");
       }
