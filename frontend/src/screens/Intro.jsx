@@ -88,7 +88,7 @@ const Intro = () => {
           <div className="mb-8">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-gray-800/50 backdrop-blur-sm rounded-full border border-gray-700/50 mb-6">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-gray-300 text-sm font-medium">Made By Gaurav & Vaibhav</span>
+              <span className="text-gray-300 text-sm font-medium">Made By Gaurav & Nancy</span>
             </div>
             
             <h1 className="text-6xl md:text-7xl font-bold text-gray-100 mb-6 leading-tight">
@@ -221,7 +221,7 @@ const Intro = () => {
                   <div className="text-gray-300">
                     <span className="text-gray-500">11</span>
                     <span className="ml-4">  res.json({`{ message: 'Hello World!' }`});</span>
-                    <span className="bg-blue-600/30 border-l-2 border-blue-500 ml-2 px-1 text-xs">Vaibhav added this</span>
+                    <span className="bg-blue-600/30 border-l-2 border-blue-500 ml-2 px-1 text-xs">Nancy added this</span>
                   </div>
                   <div className="text-cyan-400">
                     <span className="text-gray-500">12</span>
